@@ -1,30 +1,42 @@
 #!/bin/bash
 
-# 📂 要檢查的目錄
-TARGET_DIR="/var/log/nginx"
+# Nginx 與 Docker log 主目錄
+NGINX_LOG_DIR="/var/log/nginx"
+DOCKER_LOG_DIR="/var/lib/docker/containers"
 
-# 🕒 時間標記
-cdate=$(date +"%Y%m%d-%H%M")
+# 時間戳記
+TIMESTAMP=$(date +"%Y%m%d-%H%M")
 
-# 🔍 查找超過 2GB 的 log 檔案並備份壓縮
-find "$TARGET_DIR" -type f -size +2G | while read -r logfile; do
-    echo "📁 處理檔案: $logfile"
+echo "🚀 啟動 log 清理腳本：$TIMESTAMP"
 
-    # 備份副本檔名
-    backup_file="${logfile}-${cdate}"
-
-    # 拷貝備份
-    cp "$logfile" "$backup_file"
-
-    # 清空原始 log（不刪除）
+##################################
+# 📦 處理 NGINX LOGS
+##################################
+echo "▶️ 處理 Nginx logs..."
+find "$NGINX_LOG_DIR" -type f -size +2G | while read -r logfile; do
+    echo "📁 處理: $logfile"
+    cp "$logfile" "${logfile}-${TIMESTAMP}"
     : > "$logfile"
-
-    # 壓縮備份檔案
-    gzip "$backup_file" && echo "✅ 已壓縮: ${backup_file}.gz" || echo "❌ 壓縮失敗: $backup_file"
-
-    echo "-------------------------------------------"
+    gzip "${logfile}-${TIMESTAMP}" && echo "✅ 壓縮完成"
 done
 
-# 🧹 清理 7 天前的 .gz 備份
-echo "🧼 清理超過 7 天的壓縮檔案..."
-find "$TARGET_DIR" -type f -name "*.gz" -mtime +7 -exec rm -f {} \; && echo "✅ 清理完成"
+##################################
+# 🐳 處理 DOCKER JSON LOGS
+##################################
+echo "▶️ 處理 Docker container logs..."
+
+find "$DOCKER_LOG_DIR" -type f -name "*-json.log" -size +100M | while read -r dockerlog; do
+    echo "📦 壓縮 Docker log: $dockerlog"
+    cp "$dockerlog" "${dockerlog}-${TIMESTAMP}"
+    : > "$dockerlog"
+    gzip "${dockerlog}-${TIMESTAMP}" && echo "✅ 壓縮完成"
+done
+
+##################################
+# 🧹 清理所有超過 7 天的 .gz 壓縮檔
+##################################
+echo "🧽 清理 7 天前的壓縮檔案..."
+
+find "$NGINX_LOG_DIR" "$DOCKER_LOG_DIR" -type f -name "*.gz" -mtime +7 -exec rm -f {} \; && echo "✅ 舊壓縮檔已刪除"
+
+echo "✅ 所有清理任務完成：$(date)"
